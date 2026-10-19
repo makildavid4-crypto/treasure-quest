@@ -1,0 +1,716 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>寻宝大冒险 · 异步寻宝之旅</title>
+<style>
+  :root{
+    --bg:#070b18;
+    --bg2:#0d1428;
+    --panel:rgba(20,29,54,.72);
+    --line:rgba(122,150,255,.18);
+    --gold:#f5c76a;
+    --gold-2:#ffe6ac;
+    --teal:#6ef0cf;
+    --text:#e9edff;
+    --muted:#98a4cc;
+    --danger:#ff8484;
+    --ok:#7ef0b8;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    min-height:100vh;
+    background:
+      radial-gradient(1100px 700px at 15% -10%, #1c2a5c 0%, transparent 60%),
+      radial-gradient(900px 600px at 90% 0%, #2a1e46 0%, transparent 55%),
+      linear-gradient(180deg,#070b18 0%, #05070f 100%);
+    color:var(--text);
+    font-family:"Segoe UI","Microsoft YaHei","PingFang SC","Hiragino Sans GB",sans-serif;
+    overflow-x:hidden;
+  }
+  /* ---------- 星空背景 ---------- */
+  #stars{position:fixed;inset:0;pointer-events:none;z-index:0;}
+  .star{position:absolute;border-radius:50%;background:#fff;animation:twinkle 3s ease-in-out infinite;}
+  @keyframes twinkle{0%,100%{opacity:.15;transform:scale(.8);}50%{opacity:.95;transform:scale(1.15);}}
+
+  .wrap{position:relative;z-index:1;max-width:1080px;margin:0 auto;padding:28px 18px 60px;}
+
+  /* ---------- 标题 ---------- */
+  header{text-align:center;margin-bottom:22px;}
+  h1{
+    margin:0;font-size:clamp(26px,4.6vw,46px);letter-spacing:.08em;
+    font-family:Georgia,"Songti SC","STSong",serif;font-weight:700;
+    background:linear-gradient(180deg,#fff4d6 0%,var(--gold) 45%,#c98f2e 100%);
+    -webkit-background-clip:text;background-clip:text;color:transparent;
+    text-shadow:0 0 34px rgba(245,199,106,.25);
+  }
+  .subtitle{margin:8px 0 0;color:var(--muted);font-size:14px;letter-spacing:.22em;}
+  .code-hint{margin-top:6px;color:var(--muted);font-size:12px;opacity:.75;}
+  .code-hint code{color:var(--teal);font-family:Consolas,monospace;}
+
+  /* ---------- HUD ---------- */
+  .hud{
+    display:grid;grid-template-columns:1.4fr 1fr 1.6fr;gap:12px;margin-bottom:16px;
+  }
+  .hud-box{
+    background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:12px 14px;
+    backdrop-filter:blur(6px);
+  }
+  .hud-label{font-size:11px;color:var(--muted);letter-spacing:.18em;margin-bottom:8px;}
+  .bar{height:10px;border-radius:8px;background:rgba(255,255,255,.08);overflow:hidden;}
+  .bar > i{
+    display:block;height:100%;width:100%;border-radius:8px;
+    background:linear-gradient(90deg,#ff9a5c,var(--gold),#ffe9b0);
+    transition:width .8s cubic-bezier(.2,.8,.2,1);box-shadow:0 0 12px rgba(245,199,106,.5);
+  }
+  .bar.low > i{background:linear-gradient(90deg,#ff5f6d,#ff8484);}
+  #courageVal{float:right;color:var(--gold-2);font-weight:700;}
+  #timer{font-size:26px;font-weight:700;color:var(--teal);font-variant-numeric:tabular-nums;letter-spacing:.04em;}
+  .timer-unit{font-size:12px;color:var(--muted);margin-left:4px;}
+  #bag{display:flex;flex-wrap:wrap;gap:6px;min-height:26px;}
+  .chip{
+    font-size:12px;padding:4px 10px;border-radius:999px;
+    background:rgba(110,240,207,.12);border:1px solid rgba(110,240,207,.42);color:var(--teal);
+    animation:pop .45s cubic-bezier(.2,1.4,.4,1);
+  }
+  .chip.empty{background:rgba(255,255,255,.05);border-color:var(--line);color:var(--muted);}
+  @keyframes pop{from{transform:scale(.4);opacity:0;}to{transform:scale(1);opacity:1;}}
+
+  /* ---------- 地图进度 ---------- */
+  .map{
+    position:relative;background:var(--panel);border:1px solid var(--line);border-radius:16px;
+    padding:26px 18px 18px;margin-bottom:16px;backdrop-filter:blur(6px);overflow:hidden;
+  }
+  .track{position:absolute;left:8%;right:8%;top:44px;height:3px;background:rgba(255,255,255,.1);border-radius:3px;}
+  .track-fill{position:absolute;left:0;top:0;height:100%;width:0;border-radius:3px;
+    background:linear-gradient(90deg,var(--teal),var(--gold));transition:width .7s ease;box-shadow:0 0 10px rgba(110,240,207,.6);}
+  .nodes{position:relative;display:flex;justify-content:space-between;align-items:flex-start;gap:4px;}
+  .node{flex:1;display:flex;flex-direction:column;align-items:center;text-align:center;position:relative;}
+  .node .dot{
+    width:34px;height:34px;border-radius:50%;display:grid;place-items:center;
+    background:#0e1730;border:2px solid rgba(255,255,255,.16);color:var(--muted);
+    transition:all .5s ease;position:relative;z-index:2;
+  }
+  .node .dot svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;}
+  .node .name{font-size:11px;color:var(--muted);margin-top:8px;line-height:1.3;transition:color .4s;}
+  .node.done .dot{background:rgba(110,240,207,.14);border-color:var(--teal);color:var(--teal);box-shadow:0 0 14px rgba(110,240,207,.4);}
+  .node.done .name{color:var(--teal);}
+  .node.active .dot{
+    background:rgba(245,199,106,.16);border-color:var(--gold);color:var(--gold-2);
+    transform:scale(1.28);box-shadow:0 0 0 6px rgba(245,199,106,.16),0 0 22px rgba(245,199,106,.7);
+    animation:pulseGold 1.4s ease-in-out infinite;
+  }
+  .node.active .name{color:var(--gold-2);font-weight:600;}
+  .node.fail .dot{border-color:var(--danger);color:var(--danger);animation:shake .45s;}
+  @keyframes pulseGold{50%{box-shadow:0 0 0 10px rgba(245,199,106,.06),0 0 30px rgba(245,199,106,.9);}}
+  .marker{
+    position:absolute;top:30px;left:8%;width:14px;height:14px;border-radius:50%;
+    background:radial-gradient(circle at 35% 35%,#fff,var(--gold));z-index:3;
+    box-shadow:0 0 16px 4px rgba(245,199,106,.8);transition:left .7s cubic-bezier(.2,.8,.2,1);
+  }
+
+  /* ---------- 主舞台 ---------- */
+  .stage{
+    background:linear-gradient(180deg,rgba(18,26,50,.92),rgba(10,15,32,.92));
+    border:1px solid var(--line);border-radius:18px;overflow:hidden;
+    box-shadow:0 24px 60px -30px rgba(0,0,0,.9);
+  }
+  .visual{position:relative;height:300px;overflow:hidden;background:#070c1c;}
+  .scene{position:absolute;inset:0;display:grid;place-items:center;opacity:0;transform:scale(1.04);
+    transition:opacity .6s ease,transform .6s ease;pointer-events:none;}
+  .scene.active{opacity:1;transform:scale(1);}
+  .scene svg{width:100%;height:100%;max-width:520px;}
+  .scene .stroke{fill:none;stroke:var(--gold);stroke-width:2.4;stroke-linecap:round;stroke-linejoin:round;}
+  .scene .stroke-teal{fill:none;stroke:var(--teal);stroke-width:2.4;stroke-linecap:round;stroke-linejoin:round;}
+  .scene .dim{fill:none;stroke:rgba(150,170,230,.35);stroke-width:2;stroke-linecap:round;stroke-linejoin:round;}
+
+  /* 各场景动画 */
+  .spindle{animation:spin 6s linear infinite;transform-origin:250px 150px;}
+  @keyframes spin{to{transform:rotate(360deg);}}
+  .needle{animation:needle 2.4s ease-in-out infinite;transform-origin:250px 150px;}
+  @keyframes needle{0%,100%{transform:rotate(-18deg);}50%{transform:rotate(22deg);}}
+  .float{animation:float 3.6s ease-in-out infinite;}
+  @keyframes float{0%,100%{transform:translateY(0);}50%{transform:translateY(-9px);}}
+  .glow-path{stroke-dasharray:8 10;animation:dash 1.4s linear infinite;}
+  @keyframes dash{to{stroke-dashoffset:-36;}}
+  .wind{animation:wind 4s linear infinite;}
+  @keyframes wind{0%{transform:translateX(-14px);opacity:.2;}50%{opacity:.9;}100%{transform:translateX(14px);opacity:.2;}}
+  .eye{animation:eye 2s ease-in-out infinite;transform-origin:center;}
+  @keyframes eye{0%,100%{opacity:.5;transform:scale(1);}50%{opacity:1;transform:scale(1.12);}}
+  .rays{transform-origin:250px 150px;animation:rays 3s ease-in-out infinite;}
+  @keyframes rays{0%,100%{opacity:.35;transform:rotate(0) scale(1);}50%{opacity:.85;transform:rotate(8deg) scale(1.06);}}
+  .lid{transform-origin:250px 158px;animation:lid 2.6s ease-in-out infinite;}
+  @keyframes lid{0%,100%{transform:rotate(-6deg);}50%{transform:rotate(-30deg);}}
+  .sand{animation:sand 3.4s linear infinite;}
+  @keyframes sand{0%{transform:translateX(-30px);opacity:0;}20%{opacity:.9;}100%{transform:translateX(30px);opacity:0;}}
+  .twinkle-dot{animation:twinkle 2.4s ease-in-out infinite;}
+
+  /* ---------- 叙事 & 日志 ---------- */
+  .narration{
+    padding:18px 22px;border-top:1px solid var(--line);min-height:82px;
+    display:flex;align-items:center;gap:14px;
+  }
+  #stageTitle{
+    flex:0 0 auto;font-family:Georgia,serif;font-size:14px;letter-spacing:.1em;
+    color:var(--gold-2);border-right:1px solid var(--line);padding-right:14px;
+  }
+  #narrationText{font-size:15px;line-height:1.7;color:#dfe6ff;}
+  .caret{display:inline-block;width:8px;height:18px;background:var(--gold);vertical-align:-3px;
+    margin-left:2px;animation:blink .8s steps(1) infinite;border-radius:1px;}
+  @keyframes blink{50%{opacity:0;}}
+
+  .log{padding:14px 20px 20px;max-height:190px;overflow-y:auto;font-size:13px;}
+  .log ul{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:7px;}
+  .log li{display:flex;gap:9px;align-items:flex-start;color:var(--muted);animation:slidein .4s ease;}
+  .log li .t{color:rgba(150,170,230,.55);font-variant-numeric:tabular-nums;flex:0 0 auto;}
+  .log li.ok{color:var(--ok);}
+  .log li.warn{color:#ffd98a;}
+  .log li.err{color:var(--danger);}
+  @keyframes slidein{from{opacity:0;transform:translateX(-8px);}to{opacity:1;transform:translateX(0);}}
+
+  /* ---------- 控制 ---------- */
+  .controls{display:flex;gap:12px;justify-content:center;margin-top:20px;flex-wrap:wrap;}
+  button{
+    font-family:inherit;font-size:15px;font-weight:600;letter-spacing:.06em;cursor:pointer;
+    padding:12px 30px;border-radius:999px;border:1px solid rgba(245,199,106,.5);
+    background:linear-gradient(180deg,rgba(245,199,106,.22),rgba(245,199,106,.08));
+    color:var(--gold-2);transition:all .25s ease;
+  }
+  button:hover{transform:translateY(-2px);box-shadow:0 10px 24px -10px rgba(245,199,106,.8);}
+  button:disabled{opacity:.4;cursor:not-allowed;transform:none;box-shadow:none;}
+  button.ghost{border-color:var(--line);color:var(--muted);background:rgba(255,255,255,.04);}
+  button.ghost:hover{color:var(--text);box-shadow:none;border-color:rgba(150,170,230,.5);}
+
+  @media (max-width:760px){
+    .hud{grid-template-columns:1fr;}
+    .visual{height:230px;}
+    #narrationText{font-size:14px;}
+    .node .name{display:none;}
+    #stageTitle{font-size:12px;}
+  }
+</style>
+</head>
+<body>
+<div id="stars"></div>
+<div class="wrap">
+  <header>
+    <h1>寻宝大冒险</h1>
+    <p class="subtitle">一场由 ASYNC / AWAIT 驱动的异步寻宝之旅</p>
+    <p class="code-hint">核心逻辑：<code>await TreasureMap.xxx()</code> · 新增情节：星辰罗盘 / 沙漠商队 / 风之迷宫 / 守护神兽</p>
+  </header>
+
+  <section class="hud">
+    <div class="hud-box">
+      <div class="hud-label">勇气值 <span id="courageVal">100</span></div>
+      <div class="bar" id="courageBar"><i style="width:100%"></i></div>
+    </div>
+    <div class="hud-box">
+      <div class="hud-label">已用时间</div>
+      <div><span id="timer">0.0</span><span class="timer-unit">秒</span></div>
+    </div>
+    <div class="hud-box">
+      <div class="hud-label">背包 · 道具</div>
+      <div id="bag"><span class="chip empty">空空如也</span></div>
+    </div>
+  </section>
+
+  <section class="map">
+    <div class="track"><div class="track-fill" id="trackFill"></div></div>
+    <div class="marker" id="marker" style="opacity:0"></div>
+    <div class="nodes" id="nodes"></div>
+  </section>
+
+  <section class="stage">
+    <div class="visual" id="visual">
+      <!-- 1 图书馆 -->
+      <div class="scene" data-key="library">
+        <svg viewBox="0 0 500 300">
+          <g class="dim">
+            <path d="M70 40 h360 v220 h-360 z"/>
+            <path d="M70 100 h360 M70 160 h360 M70 220 h360"/>
+            <path d="M150 40 v220 M250 40 v220 M350 40 v220"/>
+          </g>
+          <g class="stroke" style="stroke-width:3">
+            <path d="M95 70 h40 M95 90 h40 M95 125 h40 M95 145 h40 M95 185 h40 M95 205 h40"/>
+            <path d="M175 70 h40 M175 90 h40 M175 125 h40 M175 145 h40 M175 185 h40 M175 205 h40"/>
+            <path d="M375 70 h40 M375 90 h40 M375 125 h40 M375 145 h40 M375 185 h40 M375 205 h40"/>
+          </g>
+          <g class="float">
+            <rect x="212" y="120" width="76" height="60" rx="10" class="stroke-teal" style="stroke-width:3"/>
+            <path d="M212 132 q-14 0 -14 12 q0 12 14 12 M288 132 q14 0 14 12 q0 12 -14 12" class="stroke-teal" style="stroke-width:3"/>
+            <path d="M240 148 h20 M240 158 h20" class="stroke-teal" style="stroke-width:2.4;opacity:.7"/>
+          </g>
+          <g>
+            <circle class="twinkle-dot" cx="180" cy="90" r="3" fill="#ffe6ac"/>
+            <circle class="twinkle-dot" cx="330" cy="120" r="2.4" fill="#6ef0cf" style="animation-delay:.6s"/>
+            <circle class="twinkle-dot" cx="230" cy="200" r="2.6" fill="#ffe6ac" style="animation-delay:1.2s"/>
+          </g>
+        </svg>
+      </div>
+      <!-- 2 罗盘 -->
+      <div class="scene" data-key="compass">
+        <svg viewBox="0 0 500 300">
+          <g class="dim">
+            <circle cx="250" cy="150" r="120"/>
+            <circle cx="250" cy="150" r="98"/>
+          </g>
+          <g class="stroke" style="stroke-width:2">
+            <path d="M250 30 v18 M250 252 v18 M130 150 h18 M352 150 h18"/>
+            <path d="M165 65 l12 12 M335 235 l-12 -12 M335 65 l-12 12 M165 235 l12 -12" class="stroke-teal"/>
+          </g>
+          <g class="spindle">
+            <path d="M250 60 L262 150 L250 240 L238 150 Z" fill="rgba(245,199,106,.22)"/>
+            <path d="M250 60 L250 240" class="stroke"/>
+          </g>
+          <g class="needle">
+            <path d="M250 150 L250 74" class="stroke" style="stroke:#6ef0cf;stroke-width:4"/>
+            <path d="M250 150 L250 226" class="stroke" style="stroke:#ff8484;stroke-width:4"/>
+            <circle cx="250" cy="150" r="10" fill="#0e1730" class="stroke"/>
+          </g>
+          <text x="250" y="46" text-anchor="middle" fill="#98a4cc" font-size="18" font-family="Georgia">N</text>
+        </svg>
+      </div>
+      <!-- 3 沙漠商队 -->
+      <div class="scene" data-key="desert">
+        <svg viewBox="0 0 500 300">
+          <circle cx="400" cy="80" r="34" class="stroke" style="stroke:#ffd98a" opacity=".9"/>
+          <g class="dim"><path d="M20 210 q90 -70 200 -20 t260 10"/><path d="M20 250 q120 -60 240 -10 t220 0"/></g>
+          <g class="stroke" style="stroke-width:3">
+            <path d="M150 190 q28 -34 56 0 q-28 -14 -56 0 z" fill="rgba(245,199,106,.15)"/>
+            <path d="M150 190 q28 -34 56 0 q-28 -14 -56 0 z" fill="rgba(245,199,106,.15)" transform="translate(80,0)"/>
+            <path d="M150 190 q28 -34 56 0 q-28 -14 -56 0 z" fill="rgba(245,199,106,.15)" transform="translate(160,0)"/>
+            <path d="M178 156 v34 M258 156 v34 M338 156 v34" class="stroke-teal"/>
+          </g>
+          <g>
+            <circle class="sand" cx="120" cy="120" r="2" fill="#ffe6ac"/>
+            <circle class="sand" cx="200" cy="150" r="1.6" fill="#ffe6ac" style="animation-delay:.7s"/>
+            <circle class="sand" cx="300" cy="110" r="2" fill="#ffe6ac" style="animation-delay:1.4s"/>
+            <circle class="sand" cx="360" cy="170" r="1.6" fill="#ffe6ac" style="animation-delay:2s"/>
+          </g>
+        </svg>
+      </div>
+      <!-- 4 破译古文 -->
+      <div class="scene" data-key="scroll">
+        <svg viewBox="0 0 500 300">
+          <g class="float">
+            <rect x="150" y="70" width="200" height="160" rx="12" class="stroke" style="stroke-width:3"/>
+            <path d="M150 70 q-26 0 -26 26 q0 26 26 26 M150 178 q-26 0 -26 26 q0 26 26 26" class="stroke-teal" style="stroke-width:3"/>
+            <path d="M350 70 q26 0 26 26 q0 26 -26 26 M350 178 q26 0 26 26 q0 26 -26 26" class="stroke-teal" style="stroke-width:3"/>
+          </g>
+          <g class="glow-path" stroke="#6ef0cf" stroke-width="3" stroke-linecap="round">
+            <path d="M180 110 h140 M180 140 h100 M180 170 h130 M180 200 h80"/>
+          </g>
+          <g class="stroke" style="stroke-width:2.4">
+            <path d="M196 110 l10 -10 M196 140 l10 -10 M196 170 l10 -10"/>
+          </g>
+        </svg>
+      </div>
+      <!-- 5 风之迷宫 -->
+      <div class="scene" data-key="maze">
+        <svg viewBox="0 0 500 300">
+          <g class="dim">
+            <path d="M120 150 h260 M150 110 h200 M150 190 h200 M180 80 h120 M180 220 h120"/>
+            <path d="M200 150 v-40 M300 150 v40 M240 110 v-30 M280 190 v30"/>
+          </g>
+          <g class="wind" style="stroke:#6ef0cf;stroke-width:3;fill:none;stroke-linecap:round">
+            <path d="M210 140 q40 -14 80 0 t60 -6" class="stroke-teal"/>
+            <path d="M200 170 q50 16 100 0" class="stroke-teal" style="animation-delay:.5s"/>
+          </g>
+          <g class="glow-path" stroke="#f5c76a" stroke-width="3.4" stroke-linecap="round">
+            <path d="M150 150 h60 v-40 h80 v50 h70 v40 h60"/>
+          </g>
+          <circle cx="420" cy="240" r="8" class="stroke" style="stroke:#7ef0b8"/>
+        </svg>
+      </div>
+      <!-- 6 神庙守卫 -->
+      <div class="scene" data-key="temple">
+        <svg viewBox="0 0 500 300">
+          <g class="stroke" style="stroke-width:3">
+            <path d="M70 240 v-120 M110 240 v-120 M390 240 v-120 M430 240 v-120"/>
+            <path d="M50 120 h400 M70 100 h360"/>
+            <path d="M170 240 v-110 h160 v110"/>
+            <path d="M190 130 h120 l-12 -30 h-96 z"/>
+          </g>
+          <g class="eye" style="transform-origin:250px 185px">
+            <circle cx="250" cy="185" r="30" class="stroke-teal" style="stroke-width:3"/>
+            <circle cx="250" cy="185" r="12" fill="#6ef0cf"/>
+            <path d="M226 185 q24 -22 48 0 q-24 22 -48 0" class="dim"/>
+          </g>
+          <g class="dim"><path d="M60 240 h380"/></g>
+        </svg>
+      </div>
+      <!-- 7 开启宝箱 -->
+      <div class="scene" data-key="chest">
+        <svg viewBox="0 0 500 300">
+          <g class="rays" style="stroke:#ffe6ac;stroke-width:3;fill:none;stroke-linecap:round">
+            <path d="M250 150 L190 70 M250 150 L310 70 M250 150 L150 130 M250 150 L350 130"/>
+          </g>
+          <g class="stroke" style="stroke-width:3">
+            <rect x="170" y="160" width="160" height="90" rx="10"/>
+            <path d="M170 190 h160" class="stroke-teal"/>
+            <rect x="252" y="196" width="18" height="22" rx="3" class="stroke-teal" style="stroke-width:2.6"/>
+          </g>
+          <g class="lid">
+            <path d="M170 160 q80 -56 160 0 z" class="stroke" style="stroke-width:3;fill:rgba(245,199,106,.16)"/>
+            <path d="M170 160 h160" class="stroke-teal" style="stroke-width:3"/>
+          </g>
+          <g>
+            <circle class="twinkle-dot" cx="220" cy="140" r="4" fill="#ffe6ac"/>
+            <circle class="twinkle-dot" cx="280" cy="128" r="3" fill="#6ef0cf" style="animation-delay:.5s"/>
+            <circle class="twinkle-dot" cx="250" cy="118" r="5" fill="#ffe6ac" style="animation-delay:1s"/>
+          </g>
+        </svg>
+      </div>
+    </div>
+
+    <div class="narration">
+      <div id="stageTitle">准备出发</div>
+      <div id="narrationText">点击「开始寻宝」，踏上这场异步冒险。</div>
+    </div>
+
+    <div class="log" id="log"><ul></ul></div>
+  </section>
+
+  <div class="controls">
+    <button id="startBtn">开始寻宝</button>
+    <button id="speedBtn" class="ghost">播放速度 x1</button>
+    <button id="resetBtn" class="ghost">重新开始</button>
+  </div>
+</div>
+
+<script>
+/* ============================================================
+   0. 星空
+   ============================================================ */
+(function makeStars(){
+  const box = document.getElementById('stars');
+  const n = 90;
+  let html = '';
+  for (let i=0;i<n;i++){
+    const size = Math.random()*2+1;
+    html += `<span class="star" style="left:${(Math.random()*100).toFixed(2)}%;
+      top:${(Math.random()*100).toFixed(2)}%;width:${size.toFixed(1)}px;height:${size.toFixed(1)}px;
+      animation-delay:${(Math.random()*3).toFixed(2)}s;opacity:${(Math.random()*.6+.2).toFixed(2)}"></span>`;
+  }
+  box.innerHTML = html;
+})();
+
+/* ============================================================
+   1. TreasureMap —— 与 console 版一致的异步 API（async/await 驱动）
+   ============================================================ */
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+class TreasureMap {
+  static getInitialClue(){
+    return new Promise((resolve) => setTimeout(() => resolve('在古老的图书馆里找到了第一个线索...'), 1000));
+  }
+  static consultStarlightCompass(clue){
+    return new Promise((resolve, reject) => {
+      setTimeout(() => {
+        if (!clue) return reject(new Error('没有线索，星辰罗盘无法校准方向!'));
+        const dirs = [
+          { name:'西北 · 赤沙戈壁', hint:'北斗第三星正指向那片会唱歌的沙子' },
+          { name:'东南 · 雾隐山谷', hint:'启明星落下的地方，山谷在夜里低语' },
+          { name:'西南 · 沉钟海岸', hint:'老人星指引着一座沉在浪里的钟楼' },
+        ];
+        resolve(dirs[Math.floor(Math.random()*dirs.length)]);
+      }, 1200);
+    });
+  }
+  static tradeWithDesertCaravan(direction){
+    return new Promise((resolve) => {
+      setTimeout(() => {
+        const merchants = ['独眼商人萨利姆','驼铃少女阿依莎','沉默的星象师'];
+        resolve({
+          merchant: merchants[Math.floor(Math.random()*merchants.length)],
+          price: 1 + Math.floor(Math.random()*3),
+          item: '古铜钥匙',
+          direction,
+        });
+      }, 1600);
+    });
+  }
+  static decodeAncientScript(clue){
+    return new Promise((resolve, reject) => {
+      setTimeout(() => {
+        if (!clue) return reject(new Error('没有线索可以解码!'));
+        resolve('解码成功!宝藏在一座古老的神庙中...');
+      }, 1500);
+    });
+  }
+  static solveWindMaze(){
+    return new Promise((resolve, reject) => {
+      setTimeout(() => {
+        if (Math.random() < 0.45) return reject(new Error('在风之迷宫里转晕了，又绕回了原地...'));
+        resolve('顺着风的方向穿过迷宫，眼前豁然开朗...');
+      }, 1800);
+    });
+  }
+  static searchTemple(location){
+    return new Promise((resolve, reject) => {
+      setTimeout(() => {
+        if (Math.random() < 0.5) return reject(new Error('糟糕!遇到了神庙守卫!'));
+        resolve('找到了一个神秘的箱子...');
+      }, 2000);
+    });
+  }
+  static sootheTempleGuardian(){
+    return new Promise((resolve) => setTimeout(() => resolve('你举起古铜钥匙，守卫认出了神庙的印记，恭敬地退到一旁...'), 1500));
+  }
+  static openTreasureBox(){
+    return new Promise((resolve) => setTimeout(() => resolve('恭喜!你找到了传说中的宝藏!'), 1000));
+  }
+}
+
+/* ============================================================
+   2. 页面状态
+   ============================================================ */
+const ICONS = {
+  library:'<svg viewBox="0 0 24 24"><path d="M4 5v14M20 5v14M8 8h4M8 12h4M14 8h3"/></svg>',
+  compass:'<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 8l2 4-2 4-2-4z"/></svg>',
+  caravan:'<svg viewBox="0 0 24 24"><path d="M5 17q3-5 6 0M13 17q3-5 6 0M8 17v3M16 17v3"/></svg>',
+  scroll:'<svg viewBox="0 0 24 24"><rect x="6" y="5" width="12" height="14" rx="2"/><path d="M9 9h6M9 13h4"/></svg>',
+  maze:'<svg viewBox="0 0 24 24"><path d="M4 4h16v16H4zM8 8h8v8H8zM12 12h4"/></svg>',
+  temple:'<svg viewBox="0 0 24 24"><path d="M4 20V9l8-5 8 5v11M9 20v-6h6v6"/></svg>',
+  chest:'<svg viewBox="0 0 24 24"><rect x="4" y="11" width="16" height="9" rx="2"/><path d="M4 11l8-6 8 6M12 15v3"/></svg>',
+};
+
+const STAGES = [
+  { key:'library', name:'古老图书馆', scene:'library' },
+  { key:'compass', name:'星辰罗盘',   scene:'compass' },
+  { key:'caravan', name:'沙漠商队',   scene:'desert'  },
+  { key:'scroll',  name:'破译古文',   scene:'scroll'  },
+  { key:'maze',    name:'风之迷宫',   scene:'maze'    },
+  { key:'temple',  name:'神庙守卫',   scene:'temple'  },
+  { key:'chest',   name:'开启宝箱',   scene:'chest'   },
+];
+
+const $ = (s) => document.querySelector(s);
+const state = { running:false, speed:1, courage:100, bag:[], t0:0, timerId:null };
+
+function buildNodes(){
+  $('#nodes').innerHTML = STAGES.map((s,i)=>`
+    <div class="node" data-idx="${i}">
+      <div class="dot">${ICONS[s.key]}</div>
+      <div class="name">${s.name}</div>
+    </div>`).join('');
+}
+buildNodes();
+
+/* 界面更新工具 */
+const wait = (ms) => sleep(ms / state.speed);
+
+function setNode(i, cls){
+  const nodes = document.querySelectorAll('.node');
+  nodes.forEach((n,idx)=>{
+    n.classList.remove('active');
+    if (idx < i) n.classList.add('done');
+  });
+  nodes[i].classList.add('active');
+  $('#marker').style.opacity = 1;
+  const pct = STAGES.length>1 ? (i/(STAGES.length-1))*84 : 0; // 8%..92%
+  $('#marker').style.left = (8 + pct) + '%';
+  const fillPct = STAGES.length>1 ? (i/(STAGES.length-1))*100 : 0;
+  $('#trackFill').style.width = fillPct + '%';
+}
+function markNodeFail(i){ document.querySelectorAll('.node')[i].classList.add('fail'); }
+function clearNodeFail(i){ document.querySelectorAll('.node')[i].classList.remove('fail'); }
+
+function setScene(key){
+  document.querySelectorAll('.scene').forEach(s=>{
+    s.classList.toggle('active', s.dataset.key === key);
+  });
+}
+function setCourage(v){
+  state.courage = Math.max(0, Math.min(100, v));
+  $('#courageVal').textContent = state.courage;
+  const bar = $('#courageBar');
+  bar.querySelector('i').style.width = state.courage + '%';
+  bar.classList.toggle('low', state.courage < 40);
+}
+function addBag(item){
+  state.bag.push(item);
+  $('#bag').innerHTML = state.bag.map(x=>`<span class="chip">${x}</span>`).join('');
+}
+function logLine(text, type){
+  const ul = $('#log ul');
+  const t = ((performance.now() - state.t0)/1000).toFixed(2).padStart(5);
+  const li = document.createElement('li');
+  li.className = type || '';
+  li.innerHTML = `<span class="t">[${t}s]</span><span>${text}</span>`;
+  ul.appendChild(li);
+  li.scrollIntoView({block:'nearest'});
+}
+async function narrate(title, text){
+  $('#stageTitle').textContent = title;
+  const el = $('#narrationText');
+  el.innerHTML = '';
+  const span = document.createElement('span');
+  const caret = document.createElement('i');
+  caret.className = 'caret';
+  el.appendChild(span); el.appendChild(caret);
+  for (let i=0;i<text.length;i++){
+    span.textContent += text[i];
+    await sleep(26 / state.speed);
+  }
+  caret.remove();
+  await wait(240);
+}
+
+/* ============================================================
+   3. 主流程：async / await 串起整条寻宝之旅
+   ============================================================ */
+async function runQuest(){
+  if (state.running) return;
+  resetUI();
+  state.running = true;
+  $('#startBtn').disabled = true;
+  state.t0 = performance.now();
+  state.timerId = setInterval(()=>{
+    $('#timer').textContent = ((performance.now()-state.t0)/1000).toFixed(1);
+  }, 100);
+
+  const inventory = [];
+  try {
+    // 1) 古老图书馆
+    setNode(0); setScene('library');
+    logLine('你站在落满尘埃的图书馆门前，深吸一口气。');
+    await narrate('古老图书馆', '烛火摇晃，你在一排落灰的书架间发现了一卷羊皮纸残片……');
+    const clue = await TreasureMap.getInitialClue();
+    logLine(clue, 'ok');
+    inventory.push('羊皮纸残片'); addBag('羊皮纸残片');
+    await narrate('古老图书馆', '你得到了第一个线索：羊皮纸残片。');
+
+    // 2) 星辰罗盘（新增情节）
+    setNode(1); setScene('compass');
+    logLine('羊皮纸背面画着一圈星图 —— 需要用星辰罗盘定位。');
+    await narrate('星辰罗盘', '你把残片举向夜空，星图亮起来，罗盘指针开始飞快旋转……');
+    const dir = await TreasureMap.consultStarlightCompass(clue);
+    logLine(`方位锁定：${dir.name}`, 'ok');
+    logLine(`星象低语：「${dir.hint}」`);
+    await narrate('星辰罗盘', `指针停下 —— 方位是「${dir.name}」。`);
+
+    // 3) 沙漠商队（新增情节）
+    setNode(2); setScene('desert');
+    logLine('你循着星象走进大漠，夜色里响起一串驼铃。');
+    await narrate('沙漠商队', '一支商队从沙丘后走出，篝火旁坐着一位愿意交易的行商……');
+    const deal = await TreasureMap.tradeWithDesertCaravan(dir);
+    logLine(`${deal.merchant}愿意以「${deal.item}」交换，索要 ${deal.price} 份勇气值`, 'warn');
+    await narrate('沙漠商队', `你与${deal.merchant}达成交易，用 ${deal.price} 份勇气换来了「${deal.item}」。`);
+    setCourage(state.courage - deal.price * 10);
+    logLine(`交易达成！获得道具：${deal.item}`, 'ok');
+    inventory.push(deal.item); addBag(deal.item);
+    logLine(`当前勇气值：${state.courage}`);
+
+    // 4) 破译古文
+    setNode(3); setScene('scroll');
+    logLine('残片上的符号需要借助神庙的星象石刻才能解开。');
+    await narrate('破译古文', '你把残片贴在石刻上，古老的符号一行行浮出微光……');
+    const location = await TreasureMap.decodeAncientScript(clue);
+    logLine(location, 'ok');
+    await narrate('破译古文', '古文被解开了：宝藏在一座古老的神庙中。');
+
+    // 5) 风之迷宫（新增情节，含失败重试）
+    setNode(4); setScene('maze');
+    logLine('神庙前的回廊被永不停息的风灌满，你走进了风之迷宫。');
+    await narrate('风之迷宫', '风在岔路间呼啸，你只能听风辨路……');
+    let mazeOk = false;
+    for (let i=1;i<=3 && !mazeOk;i++){
+      try {
+        const r = await TreasureMap.solveWindMaze();
+        logLine(r, 'ok'); mazeOk = true;
+      } catch (e){
+        logLine(e.message, 'warn');
+        clearNodeFail(4); markNodeFail(4);
+        await narrate('风之迷宫', `第 ${i} 次尝试迷路了，你退回入口重新辨认风的方向……`);
+      }
+    }
+    clearNodeFail(4);
+    await narrate('风之迷宫', '终于，你顺着风的缝隙穿过了迷宫。');
+
+    // 6) 神庙守卫（原情节 + 新增安抚）
+    setNode(5); setScene('temple');
+    logLine('穿过迷宫，你终于站到了神庙大门前。');
+    await narrate('神庙守卫', '巨大的石门缓缓开启，一双发光的眼睛在黑暗中盯住了你……');
+    let found = false;
+    for (let i=1;i<=3 && !found;i++){
+      try {
+        const r = await TreasureMap.searchTemple(location);
+        logLine(r, 'ok'); found = true;
+      } catch (e){
+        logLine(e.message, 'warn');
+        markNodeFail(5);
+        if (inventory.includes('古铜钥匙')){
+          await narrate('神庙守卫', '守卫发出一声低吼，你举起了古铜钥匙……');
+          const r = await TreasureMap.sootheTempleGuardian();
+          logLine(r, 'ok');
+        } else {
+          setCourage(state.courage - 15);
+          logLine('没有钥匙，你只能悄悄绕开守卫的视线……', 'warn');
+          await narrate('神庙守卫', '你贴着石壁屏住呼吸，悄悄绕过了守卫的视线。');
+        }
+      }
+    }
+    clearNodeFail(5);
+
+    // 7) 开启宝箱
+    setNode(6); setScene('chest');
+    logLine('你在神庙最深处看到了一个布满星纹的箱子。');
+    await narrate('开启宝箱', '你屏住呼吸，缓缓掀开箱盖……');
+    const treasure = await TreasureMap.openTreasureBox();
+    logLine(treasure, 'ok');
+    await narrate('开启宝箱', '金光迸发 —— ' + treasure);
+
+    // 8) 结局
+    document.querySelectorAll('.node').forEach(n=>{ n.classList.remove('active'); n.classList.add('done'); });
+    $('#trackFill').style.width = '100%';
+    $('#marker').style.left = '92%';
+    const total = ((performance.now()-state.t0)/1000).toFixed(1);
+    logLine(`寻宝完成！总耗时 ${total}s`, 'ok');
+    logLine(`最终背包：[${inventory.join('、')}]`, 'ok');
+    logLine(`剩余勇气值：${state.courage}`, 'ok');
+    logLine('你抱着宝箱走出神庙，漫天星辰为你亮起。', 'ok');
+    await narrate('寻宝完成', `恭喜！你找到了传说中的宝藏。耗时 ${total}s，背包：[${inventory.join('、')}]，剩余勇气 ${state.courage}。`);
+  } catch (error){
+    logLine('任务失败: ' + error.message, 'err');
+    await narrate('任务失败', '寻宝之旅中断了：' + error.message);
+  } finally {
+    state.running = false;
+    clearInterval(state.timerId);
+    $('#startBtn').disabled = false;
+  }
+}
+
+/* ============================================================
+   4. 控制
+   ============================================================ */
+function resetUI(){
+  state.courage = 100; state.bag = [];
+  setCourage(100);
+  $('#bag').innerHTML = '<span class="chip empty">空空如也</span>';
+  $('#log ul').innerHTML = '';
+  $('#timer').textContent = '0.0';
+  $('#trackFill').style.width = '0%';
+  $('#marker').style.opacity = 0;
+  $('#marker').style.left = '8%';
+  $('#stageTitle').textContent = '准备出发';
+  $('#narrationText').textContent = '点击「开始寻宝」，踏上这场异步冒险。';
+  document.querySelectorAll('.node').forEach(n=>n.classList.remove('active','done','fail'));
+  document.querySelectorAll('.scene').forEach(s=>s.classList.remove('active'));
+  clearInterval(state.timerId);
+}
+
+$('#startBtn').addEventListener('click', runQuest);
+$('#resetBtn').addEventListener('click', () => { if(!state.running) resetUI(); });
+$('#speedBtn').addEventListener('click', (e) => {
+  state.speed = state.speed === 1 ? 2 : state.speed === 2 ? 4 : 1;
+  e.target.textContent = '播放速度 x' + state.speed;
+});
+
+// 入场：先展示图书馆场景
+setScene('library');
+</script>
+</body>
+</html>
